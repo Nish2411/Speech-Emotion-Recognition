@@ -3,7 +3,7 @@ import glob
 import numpy as np 
 import pickle
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -28,14 +28,19 @@ observed_emotions = ['neutral','happy','sad','angry']
 # Load dataset
 
 def load_data():
-    x,y = [],[] 
+    x, y, groups = [], [], []
 
     #path to dataset
     for file in glob.glob("dataset/**/*.wav", recursive=True):
         file_name = os.path.basename(file)
+        parts = file_name.split("-")
 
         #emotion code from filename
-        emotion_code = file_name.split("-")[2]
+        if len(parts) < 7:
+            continue
+
+        emotion_code = parts[2]
+        actor_id = parts[6].split(".")[0]
 
         emotion = emotions.get(emotion_code)
         
@@ -44,27 +49,34 @@ def load_data():
             if feature is not None:
                 x.append(feature)
                 y.append(emotion)
-    return np.array(x),y 
+                groups.append(actor_id)
+    return np.array(x), y, np.array(groups)
 
 # Load features and Labels
 
 print("loading dataset and extracting features...")
-X, y = load_data()
+X, y, groups = load_data()
 
 print(f"Total samples: {len(X)}")
 
-#split dataset
+#split dataset by speaker
 
-x_train, x_test, y_train, y_test = train_test_split(
-    X,
-    y,
+splitter = GroupShuffleSplit(
+    n_splits=1,
     test_size=0.25,
-    random_state=42,
-    stratify=y
-
+    random_state=42
 )
+
+train_idx, test_idx = next(splitter.split(X, y, groups))
+x_train, x_test = X[train_idx], X[test_idx]
+y = np.array(y)
+y_train, y_test = y[train_idx], y[test_idx]
+train_actors = sorted(set(groups[train_idx]))
+test_actors = sorted(set(groups[test_idx]))
 print("Training samples:", len(x_train))
 print("Testing samples:", len(x_test))
+print("Training actors:", ", ".join(train_actors))
+print("Testing actors:", ", ".join(test_actors))
 
 # create MLP Model
 
